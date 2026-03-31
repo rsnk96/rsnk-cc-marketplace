@@ -8,7 +8,7 @@ license: MIT
 # Read-only git only (no add/commit/push/checkout/reset/merge/rebase/stash apply/submodule update etc.)
 allowed-tools: Read, Grep, Glob, Bash, Agent, Skill, WebSearch, Search, TaskCreate, TaskUpdate, TaskList, TaskGet, Shell(tail), Shell(xxd), Shell(python3), Shell(git show), Shell(git rev-parse), Shell(git diff), Shell(git log), Shell(git branch), Shell(git status), Shell(git blame), Shell(git grep), Shell(git ls-files), Shell(git ls-tree), Shell(git cat-file), Shell(git describe), Shell(git rev-list), Shell(git for-each-ref), Shell(git merge-base), Shell(git reflog), Shell(git worktree list), Shell(git remote), Shell(git tag), Shell(git stash list), Shell(git stash show), Shell(git config), Shell(git symbolic-ref), Shell(git name-rev), Shell(git shortlog), Shell(git count-objects), Shell(git verify-commit), Shell(git verify-tag), Shell(git submodule status), Shell(git submodule foreach)
 metadata:
-  version: "5.4.0"
+  version: "5.5.4"
   domain: quality
   triggers: code review, PR review, pull request, review code, code quality
 ---
@@ -23,13 +23,22 @@ This skill requires the `pr-review-toolkit` plugin from the official Claude Code
 /plugin install pr-review-toolkit@claude-plugins-official
 ```
 
-The code-reviewer skill launches 6 specialized review agents from pr-review-toolkit:
+The code-reviewer skill launches up to 9 specialized review agents:
+
+**Required (from pr-review-toolkit):**
 - `pr-review-toolkit:code-reviewer` - Code quality and bug detection
 - `pr-review-toolkit:pr-test-analyzer` - Test coverage analysis
 - `pr-review-toolkit:comment-analyzer` - Comment accuracy review
 - `pr-review-toolkit:silent-failure-hunter` - Error handling detection
 - `pr-review-toolkit:type-design-analyzer` - Type system design review
 - `pr-review-toolkit:code-simplifier` - Simplification suggestions
+
+**Always included:**
+- `superpowers:code-reviewer` - Architectural and correctness review via the superpowers reviewer subagent
+
+**Optional (if Codex is configured — run `/codex:setup` to enable):**
+- `codex:review` - Codex code review pass
+- `codex:adversarial-review` - Codex adversarial (red-team) review pass
 
 Without pr-review-toolkit installed, this skill will fail at Step 2 with agent launch errors.
 
@@ -107,11 +116,29 @@ If any submodule references were updated:
 
 **If no submodule references were updated, skip this step entirely.**
 
-### Step 2 — Launch all 6 specialized review agents IN PARALLEL
+### Step 1.75 — Check Codex availability
 
-**CRITICAL: Launch all 6 agents in a SINGLE message with multiple Agent tool calls.**
+Before launching agents, determine whether Codex is configured and reachable:
 
-Invoke these agents simultaneously (skip type-design-analyzer if no types changed):
+```bash
+node "/home/nikhil/.claude/plugins/marketplaces/openai-codex/plugins/codex/scripts/codex-companion.mjs" setup --json 2>/dev/null
+```
+
+- If the script **does not exist or exits non-zero**: mark Codex as **unavailable** — skip Codex agents in Step 2 and note the omission in the final report.
+- If the output JSON has `auth.loggedIn` set to `false` or `auth.available` set to `false`: mark Codex as **unavailable** — tell the user to run `/codex:setup` in the final report.
+- If `auth.loggedIn` is `true`: mark Codex as **available**.
+
+Also get the git SHAs now (needed for the superpowers reviewer):
+```bash
+git rev-parse HEAD
+git rev-parse HEAD~1   # or $(git merge-base main HEAD) if on a branch
+```
+
+### Step 2 — Launch ALL review agents IN PARALLEL
+
+**CRITICAL: Launch all agents in a SINGLE message with multiple Agent tool calls.**
+
+**Core 6 agents** (always launch; skip type-design-analyzer if no types changed):
 - pr-review-toolkit:code-reviewer
 - pr-review-toolkit:pr-test-analyzer
 - pr-review-toolkit:comment-analyzer
@@ -119,19 +146,84 @@ Invoke these agents simultaneously (skip type-design-analyzer if no types change
 - pr-review-toolkit:type-design-analyzer
 - pr-review-toolkit:code-simplifier — **IMPORTANT:** When invoking code-simplifier, add this instruction to the prompt: "Do NOT make any edits. Instead, provide suggestions for improvements in your report. Only analyze and suggest, never modify files."
 
+**superpowers:code-reviewer** (always launch):
+
+Launch a general-purpose agent with the following prompt (substitute the actual SHA values from Step 1.75 and the scope description from Step 1):
+
+```
+Invoke the superpowers:requesting-code-review skill using the Skill tool.
+
+Context for the review:
+- BASE_SHA: {BASE_SHA}
+- HEAD_SHA: {HEAD_SHA}
+- What was changed: {one-line summary from git log}
+- Scope: {scope description from Step 1}
+
+Follow the skill's instructions exactly to dispatch the superpowers:code-reviewer subagent
+with the correct context. Return the complete reviewer output verbatim.
+```
+
+**Codex agents** (launch only if Codex is **available** per Step 1.75):
+
+The Codex review commands have `disable-model-invocation: true` and cannot be invoked via the Skill tool. Launch two general-purpose agents that call the companion script directly via Bash.
+
+First, map the scope from Step 1 to Codex flags:
+- Branch vs main/master: `--base main --scope branch` (or `--base master --scope branch`)
+- Last commit (HEAD vs HEAD~1): `--base HEAD~1 --scope branch`
+- Unstaged / working tree: `--scope working-tree`
+
+Agent A prompt (substitute `{SCOPE_FLAGS}` with the actual flags):
+```
+Run this Bash command:
+
+codex exec review {SCOPE_FLAGS} --dangerously-bypass-approvals-and-sandbox
+
+The output will be verbose. Parse it and return a structured summary containing:
+- Each distinct finding with: file:line, issue description, severity estimate
+- Overall verdict (approve / request changes / comment)
+Do not return the raw output verbatim — condense it to actionable findings only.
+If the command fails, return the error verbatim.
+```
+
+Agent B prompt (substitute `{SCOPE_FLAGS}` with the same flags):
+```
+Run this Bash command and return its complete stdout verbatim without summarizing or paraphrasing:
+
+node "/home/nikhil/.claude/plugins/marketplaces/openai-codex/plugins/codex/scripts/codex-companion.mjs" adversarial-review --wait {SCOPE_FLAGS}
+
+If the command fails or produces no output, return the error verbatim.
+```
+
 Wait for all agents to complete and capture findings from each.
+
+If Codex agents fail (exit error, timeout, or "not configured"), capture the failure reason and note it in the final report rather than aborting the overall review.
+
+### Step 2.5 — Enumerate ALL findings from ALL agents
+
+**Before creating any tasks**, scan every agent's output in full and produce a complete findings table. Every distinct finding from every agent must be a row. Do not proceed to Step 3 until all agent outputs have been fully scanned.
+
+| # | Agent | File:Line | Summary | Prelim Severity |
+|---|-------|-----------|---------|-----------------|
+| … | …     | …         | …       | …               |
+
+**Rules:**
+- One row per distinct finding. If two agents raise the same issue at the same location, merge into one row and note both agents.
+- Do not skip findings you consider minor or obvious — list them all. Filtering happens in Step 4.
+- If an agent produced no findings (e.g., codex:review sandbox failure), write "no findings / sandbox failure" in a single row so it's explicit.
+
+After the table is complete, count the rows. The number of validation tasks created in Step 3 must equal the number of finding rows.
 
 ### Step 3 — Create validation task list
 
 After the review-pr skill completes, create a structured task list using TaskCreate for each finding that requires validation. This helps track progress through the validation process and ensures no finding is missed.
 
-**For each finding reported by review-pr:**
+**For each row in the findings table from Step 2.5:**
 
 1. Create a task with:
    - **subject**: `"Validate: [file:line] - [brief issue description]"`
    - **description**: Include:
      - Full finding description from the agent
-     - Which agent raised it (code-reviewer, pr-test-analyzer, comment-analyzer, silent-failure-hunter, type-design-analyzer, or code-simplifier)
+     - Which agent raised it (code-reviewer, pr-test-analyzer, comment-analyzer, silent-failure-hunter, type-design-analyzer, code-simplifier, superpowers:code-reviewer, codex:review, or codex:adversarial-review)
      - Preliminary severity estimate (Critical/Major/Minor) based on the agent's assessment
      - Validation checklist items:
        ```
@@ -244,6 +336,9 @@ These findings could not be definitively classified as real issues or false posi
 
 ## Positive Feedback
 [Specific patterns done well — aggregate from all agents.]
+
+## Codex Reviews
+[Include this section only if Codex agents ran. Summarize key findings from codex:review and codex:adversarial-review verbatim or as brief bullet points. If Codex was unavailable, note: “⚠️ Codex not configured — run /codex:setup to enable.”]
 
 ## Verdict: Approve / Request Changes / Comment
 [Based on validated findings severity.]

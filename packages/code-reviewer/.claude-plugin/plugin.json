@@ -1,6 +1,6 @@
 {
   "name": "code-reviewer",
-  "version": "5.4.0",
+  "version": "5.5.4",
   "description": "Analyzes code diffs and files to identify bugs, security vulnerabilities, code smells, and architectural concerns, then produces a structured review report with prioritized, actionable feedback.",
   "author": {
     "name": "Nikhil",
