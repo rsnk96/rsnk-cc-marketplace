@@ -1,0 +1,13 @@
+{
+  "name": "code-reviewer",
+  "version": "5.4.0",
+  "description": "Analyzes code diffs and files to identify bugs, security vulnerabilities, code smells, and architectural concerns, then produces a structured review report with prioritized, actionable feedback.",
+  "author": {
+    "name": "Nikhil",
+    "email": "rsnk96@gmail.com"
+  },
+  "homepage": "https://github.com/rsnk96/rsnk-cc-marketplace",
+  "repository": "https://github.com/rsnk96/rsnk-cc-marketplace",
+  "keywords": ["code-review", "quality", "git", "pr"],
+  "license": "MIT"
+}

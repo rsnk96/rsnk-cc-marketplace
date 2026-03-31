@@ -1,0 +1,24 @@
+{
+  "name": "statusline",
+  "version": "1.1.1",
+  "description": "Installs a status line script for Claude Code showing branch, model, cost, duration, diff lines, and an optional quote.",
+  "author": {
+    "name": "Nikhil",
+    "email": "rsnk96@gmail.com"
+  },
+  "contributors": [
+    {
+      "name": "Kazuki Hashimoto",
+      "email": "setouchi.develop@gmail.com",
+      "note": "Original author at setouchi-h/cc-marketplace"
+    }
+  ],
+  "homepage": "https://github.com/rsnk96/rsnk-cc-marketplace",
+  "repository": "https://github.com/rsnk96/rsnk-cc-marketplace",
+  "license": "MIT",
+  "keywords": ["claude", "statusline", "productivity", "shell"],
+  "commands": [
+    "./commands/install-statusline.md",
+    "./commands/preview-statusline.md"
+  ]
+}

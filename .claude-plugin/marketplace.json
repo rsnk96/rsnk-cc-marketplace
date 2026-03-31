@@ -1,0 +1,28 @@
+{
+  "name": "rsnk-cc-marketplace",
+  "owner": {
+    "name": "Nikhil",
+    "email": "rsnk96@gmail.com"
+  },
+  "metadata": {
+    "description": "Personal Claude Code plugin marketplace by Nikhil (github.com/rsnk96).",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "code-reviewer",
+      "source": "./packages/code-reviewer",
+      "description": "Analyzes code diffs and files to identify bugs, security vulnerabilities, code smells, and architectural concerns, then produces a structured review report with prioritized, actionable feedback."
+    },
+    {
+      "name": "gitlab-mr",
+      "source": "./packages/gitlab-mr",
+      "description": "Creates GitLab Merge Requests using the glab CLI with gitmoji-prefixed titles and a structured MR body."
+    },
+    {
+      "name": "statusline",
+      "source": "./packages/statusline",
+      "description": "Rich shell status line for Claude Code showing branch, model, cost, duration, diff lines, and an optional quote."
+    }
+  ]
+}

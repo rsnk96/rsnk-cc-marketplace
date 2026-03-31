@@ -1,0 +1,13 @@
+{
+  "name": "gitlab-mr",
+  "version": "1.0.0",
+  "description": "Creates GitLab Merge Requests using the glab CLI with gitmoji-prefixed titles and a structured MR body.",
+  "author": {
+    "name": "Nikhil",
+    "email": "rsnk96@gmail.com"
+  },
+  "homepage": "https://github.com/rsnk96/rsnk-cc-marketplace",
+  "repository": "https://github.com/rsnk96/rsnk-cc-marketplace",
+  "keywords": ["gitlab", "merge-request", "git", "gitmoji"],
+  "license": "MIT"
+}
